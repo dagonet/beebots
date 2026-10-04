@@ -1,5 +1,6 @@
-// Swap one bee without Setup. Engine stopped, inside the engine container:
-//   node dist/tools/swap-bee.js --slot bee2 --name "Wanna Bee" --style wanna --tagline "the contrarian" --rules "..." [--coins BTC,ETH] [--look "..."] [--force]
+// Swap one bee without Setup. Stop the engine first (a running engine writes the old bee straight back), wait 30 s:
+//   docker compose stop engine
+//   docker compose run --rm --no-deps engine node dist/tools/swap-bee.js --slot bee2 --name "Wanna Bee" --style wanna --tagline "the contrarian" --rules "..." [--coins BTC,ETH] [--look "..."] [--force]
 // Paints a portrait with the stored OpenAI key when --look is given.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

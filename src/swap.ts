@@ -9,6 +9,8 @@ import { imageDir } from "./setup.js";
 
 /** Every table with a per-bee row. */
 export const SLOT_TABLES = ["bee_state", "decisions", "orders", "fills", "funding", "equity_snapshots", "reconciliations", "caps"] as const;
+/** A bee_state write newer than this means the engine is probably still running (it saves every tick). */
+const LIVE_ENGINE_MS = 30_000;
 
 export interface SwapOptions {
   settingsPath: string;
@@ -32,6 +34,11 @@ export function swapSlot(o: SwapOptions): { backupDir: string } {
     const row = db.prepare(`SELECT json FROM bee_state WHERE bee = ?`).get(o.slot) as { json: string } | undefined;
     const open = row ? (JSON.parse(row.json) as { position: unknown }).position : null;
     if (open && !o.force) throw new Error(`${o.slot} has an open position; close it first or pass --force`);
+    // A running engine saves every bee each tick and would write the old bee's state straight back over the swap.
+    const last = (db.prepare(`SELECT MAX(updated_ts) AS t FROM bee_state`).get() as { t: number | null }).t;
+    if (last !== null && o.now - last < LIVE_ENGINE_MS && !o.force) {
+      throw new Error(`the engine saved its state ${Math.round((o.now - last) / 1000)} s ago: stop the engine, wait ${LIVE_ENGINE_MS / 1000} s, then retry`);
+    }
 
     const backupDir = join(dirname(o.settingsPath), `pre-swap-${o.slot}-${o.now}`);
     mkdirSync(backupDir, { recursive: true });
@@ -42,6 +49,8 @@ export function swapSlot(o: SwapOptions): { backupDir: string } {
 
     db.exec("BEGIN");
     for (const t of SLOT_TABLES) db.prepare(`DELETE FROM ${t} WHERE bee = ?`).run(o.slot);
+    // The dashboard stream replays recent events; they carry the bee inside the JSON, not in a column.
+    db.prepare(`DELETE FROM events WHERE json_extract(json, '$.bee') = ?`).run(o.slot);
     db.exec("COMMIT");
     rmSync(join(images, `${o.slot}.jpg`), { force: true });
     saveSettings(o.settingsPath, next);
