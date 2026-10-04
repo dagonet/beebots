@@ -47,22 +47,46 @@ describe("wanna: entries", () => {
 });
 
 describe("wanna: menu", () => {
-  it("flat: every eligible entry as an open at 1x equity, nothing else", () => {
+  it("flat: every eligible entry as an open at 1x equity, plus WAIT so Jev can say no", () => {
     const m = wanna.menu(c());
-    expect(labels(m)).toEqual(["LONG_AAA", "LONG_BBB", "LONG_CCC", "LONG_DDD", "SHORT_WWW", "SHORT_XXX", "SHORT_YYY", "SHORT_ZZZ"]);
+    expect(labels(m)).toEqual(["LONG_AAA", "LONG_BBB", "LONG_CCC", "LONG_DDD", "SHORT_WWW", "SHORT_XXX", "SHORT_YYY", "SHORT_ZZZ", "WAIT"]);
     expect(m.LONG_AAA!.intent).toMatchObject({ kind: "open", side: "long", sizeFrac: 0.5, setup: "strict" });
     expect(m.SHORT_ZZZ!.intent).toMatchObject({ kind: "open", side: "short" });
+    expect(m.WAIT!.intent).toEqual({ kind: "hold" });
   });
 
-  it("holding: HOLD, CLOSE and a switch to every other eligible coin, never to itself", () => {
+  it("flat with a single eligible coin: that entry and WAIT (4 Oct: a lone SHORT_ZEC was a forced pick)", () => {
+    const only = view([lag("ZEC", -20), coin("BTC", { ret7dPct: 1, ret24hPct: 0.2, volZ: -1 })]);
+    expect(labels(wanna.menu(c(bee("wanna"), only)))).toEqual(["SHORT_ZEC", "WAIT"]);
+  });
+
+  it("flat with nothing eligible: an empty menu, not a lone WAIT", () => {
+    expect(wanna.menu(c(bee("wanna"), market({ VVV: { volZ: 0 }, WWW: { volZ: 0 }, XXX: { volZ: 0 }, YYY: { volZ: 0 }, ZZZ: { volZ: 0 }, AAA: { volZ: 0 }, BBB: { volZ: 0 }, CCC: { volZ: 0 }, DDD: { volZ: 0 }, EEE: { volZ: 0 } })))).toEqual({});
+  });
+
+  it("holding a coin that still qualifies: HOLD and a switch to every other eligible coin, no CLOSE (code owns the exits)", () => {
     const v = market();
     const aaa = v.stats.get("AAA-USD_UM_XPERP-310404")!;
     const m = wanna.menu(c(bee("wanna", { position: position(aaa), flatSince: null }), v));
     expect(m.HOLD!.intent).toEqual({ kind: "hold" });
-    expect(m.CLOSE!.intent).toMatchObject({ kind: "close" });
+    expect(m.CLOSE).toBeUndefined();
     expect(m.LONG_AAA).toBeUndefined();
     expect(m.LONG_BBB!.intent).toMatchObject({ kind: "switch", side: "long" });
     expect(m.SHORT_ZZZ!.intent).toMatchObject({ kind: "switch", side: "short" });
+  });
+
+  it("holding the only qualifying coin: HOLD alone, so the rules hold without asking Jev", () => {
+    const only = view([lag("ZEC", -20), coin("BTC", { ret7dPct: 1, ret24hPct: 0.2, volZ: -1 })]);
+    const zec = only.stats.get("ZEC-USD_UM_XPERP-310404")!;
+    expect(labels(wanna.menu(c(bee("wanna", { position: position(zec, { side: "short" }), flatSince: null }), only)))).toEqual(["HOLD"]);
+  });
+
+  it("holding a coin that no longer qualifies (volume faded): CLOSE is offered", () => {
+    const v = market({ AAA: { volZ: -0.5 } });
+    const aaa = v.stats.get("AAA-USD_UM_XPERP-310404")!;
+    const m = wanna.menu(c(bee("wanna", { position: position(aaa), flatSince: null }), v));
+    expect(m.CLOSE!.intent).toMatchObject({ kind: "close" });
+    expect(m.HOLD).toBeDefined();
   });
 
   it("holding a coin missing from the market data: HOLD and CLOSE are still offered", () => {

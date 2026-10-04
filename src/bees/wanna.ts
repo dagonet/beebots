@@ -69,7 +69,7 @@ export const wanna: BeeBrain = {
   id: "wanna",
   neverForce: true,
   strategy:
-    "You are wanna-bee, the contrarian. Momentum with a funding edge: go long the week's strongest coins while their volume is rising and shorts are paying funding, go short the weakest while their volume is rising and longs are paying. Every coin on your menu already has funding on its side; prefer the one where funding is most stretched against the crowd (fund_pct, fund_z). No holding period and no loyalty: CLOSE or switch the moment a better leader or laggard shows up. The code sets a 6-8% stop, takes half off at +6%, trails the rest, and closes the moment funding flips against you.",
+    "You are wanna-bee, the contrarian. Momentum with a funding edge: go long the week's strongest coins while their volume is rising and shorts are paying funding, go short the weakest while their volume is rising and longs are paying. Every coin on your menu already has funding on its side; prefer the one where funding is most stretched against the crowd (fund_pct, fund_z). WAIT unless a setup convinces you. No holding period and no loyalty: switch the moment a clearly better leader or laggard shows up. CLOSE is only offered once your coin no longer qualifies. The code sets a 6-8% stop, takes half off at +6%, trails the rest, and closes the moment funding flips against you.",
   convictionLabels: ["meh", "keen", "eager", "all-in"],
 
   universe(ctx) {
@@ -98,18 +98,24 @@ export const wanna: BeeBrain = {
 
   menu(ctx) {
     const p = ctx.bee.position;
+    const all = entries(ctx);
     const m: Menu = {};
     if (p) {
       m.HOLD = { desc: "keep position", intent: { kind: "hold" } };
-      m.CLOSE = { desc: "close now", intent: { kind: "close", reason: "close" } };
+      // The exits are code's (stop, half at +6%, trail, funding flip). A plain CLOSE every tick was a coin toss that
+      // churned fees (4 Oct: six ZEC shorts closed within 20 s), so it is offered only once the coin no longer qualifies.
+      const stillQualifies = all.some((e) => e.s.instId === p.instId && e.side === p.side);
+      if (!stillQualifies) m.CLOSE = { desc: `${p.coin} no longer qualifies, close`, intent: { kind: "close", reason: "no_longer_qualifies" } };
     }
-    for (const e of entries(ctx)) {
+    for (const e of all) {
       if (p && e.s.instId === p.instId) continue;
       const label = `${e.side.toUpperCase()}_${e.s.coin}`;
       m[label] = p
         ? { desc: `close ${p.coin}, ${e.side} ${e.s.coin}`, intent: { kind: "switch", instId: e.s.instId, side: e.side, sizeFrac: ENTRY_FRAC, setup: "strict" } }
         : { desc: null, intent: { kind: "open", instId: e.s.instId, side: e.side, sizeFrac: ENTRY_FRAC, setup: "strict" } };
     }
+    // Flat with something on offer: Jev may decline (a lone entry used to be a forced pick).
+    if (!p && all.length) m.WAIT = { desc: "no setup convinces, keep waiting", intent: { kind: "hold" } };
     return m;
   },
 

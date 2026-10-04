@@ -9,7 +9,9 @@ no loyalty to a coin.
 
     LONG_<coin>    x up to 4: top-20% 7-day leaders, volume z > 0, funding <= -0.002%/8h (shorts pay)
     SHORT_<coin>   x up to 4: bottom-20% 7-day laggards, volume z > 0, funding >= +0.002%/8h (longs pay)
-    HOLD / CLOSE   while holding; every other menu coin becomes a switch
+    WAIT           while flat and something is on offer (Jev may decline every entry)
+    HOLD           while holding; every other menu coin becomes a switch
+    CLOSE          only once the held coin no longer qualifies (the exits are code's)
     conviction: score ["meh","keen","eager","all-in"] (display only)
 
 ## Risk and forcing (code)
@@ -19,6 +21,12 @@ no loyalty to a coin.
 - Half off once the mark is +6% past entry; then the stop trails 3 x ATR(1h) behind the mark, never below break-even.
 - Funding sign flips against the position (long: > 0, short: < 0): closed at once, whatever Jev says, even when benched.
 - 6 trades a day, $3.00 fee budget, 5 min cooldown (`WANNA_*`).
+
+## 4 Oct 2026 fix
+
+The first menu had no WAIT and a plain CLOSE on every tick. With ZEC the only candidate, Jev was handed a lone
+SHORT_ZEC (a forced pick), then flipped a ~50/50 HOLD/CLOSE coin every 10 s: six round trips in 30 minutes, $1.91 in
+fees, trade cap gone by 10:28 UTC. WAIT now lets Jev decline, and CLOSE waits for the coin to stop qualifying.
 
 ## Honest expectation
 
