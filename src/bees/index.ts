@@ -3,6 +3,7 @@ import { bizzy } from "./bizzy.js";
 import { boozy } from "./boozy.js";
 import { breezy } from "./breezy.js";
 import type { BeeBrain } from "./types.js";
+import { wanna } from "./wanna.js";
 
 /** One brain per trading style. */
-export const BRAINS: Record<StyleId, BeeBrain> = { bizzy, breezy, boozy };
+export const BRAINS: Record<StyleId, BeeBrain> = { bizzy, breezy, boozy, wanna };

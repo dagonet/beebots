@@ -5,8 +5,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { dirname } from "node:path";
 import { z } from "zod";
 
-export const STYLES = ["bizzy", "breezy", "boozy"] as const;
-/** A trading style is one of the three built-in strategies, named after the bee that first traded it. */
+export const STYLES = ["bizzy", "breezy", "boozy", "wanna"] as const;
+/** A trading style is one of the built-in strategies, named after the bee that first traded it. */
 export type StyleId = (typeof STYLES)[number];
 
 export const STYLE_INFO: Record<StyleId, { label: string; blurb: string; name: string; tagline: string }> = {
@@ -27,6 +27,12 @@ export const STYLE_INFO: Record<StyleId, { label: string; blurb: string; name: s
     blurb: "Chases the strongest 7-day mover across every liquid coin, and adds to winners. Big swings, strange coins.",
     name: "Boozy",
     tagline: "the degen",
+  },
+  wanna: {
+    label: "Contrarian Momentum",
+    blurb: "Longs the week's strongest coins and shorts the weakest, but only where funding says the crowd is on the other side. Takes half at +6%, no holding period.",
+    name: "Contra",
+    tagline: "the contrarian",
   },
 };
 

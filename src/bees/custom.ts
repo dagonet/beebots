@@ -16,10 +16,12 @@ export interface CustomRules {
 }
 
 /**
- * The brain a designed bee runs on. Trend needs BTC/ETH only; Breakout needs its own four coins only; anything else
- * (including "any coin") runs on Momentum, which ranks every coin that passes the gates.
+ * The brain a designed bee runs on. Trend needs BTC/ETH only; Breakout needs its own four coins only; Contrarian
+ * Momentum takes any list; anything else (including "any coin") runs on Momentum, which ranks every coin that passes
+ * the gates.
  */
 export function deriveStyle(wanted: StyleId, coins: string[]): StyleId {
+  if (wanted === "wanna") return "wanna";
   const within = (list: readonly string[]) => coins.length > 0 && coins.every((c) => list.includes(c));
   if (wanted === "breezy" && within(BREEZY_COINS)) return "breezy";
   if (wanted === "bizzy" && within(BIZZY_BREAKOUT_COINS)) return "bizzy";
