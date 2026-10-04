@@ -22,6 +22,8 @@ export interface Position {
   peakPx?: number | null;
   /** breezy: ensemble score at entry, for TRIM_HALF. */
   entryScore?: number;
+  /** wanna: half the position has been taken off (set by the engine after any trim). */
+  halfTaken?: boolean;
 }
 
 export type CapReason = "trade_cap" | "fee_budget" | "loss_stop" | "retired";
@@ -73,6 +75,15 @@ export interface MenuOption {
 }
 export type Menu = Record<string, MenuOption>;
 
+/** A rule-based exit the code takes whatever Jev says (checked right after the code stop and time stop). */
+export interface ForcedExit {
+  intent: Extract<Intent, { kind: "close" | "trim" }>;
+  /** forcedBy / vetoedBy tag, e.g. "funding_flip". */
+  reason: string;
+  /** One line for the dashboard. */
+  status: string;
+}
+
 export interface BeeContext {
   bee: BeeState;
   view: MarketView;
@@ -118,6 +129,8 @@ export interface BeeBrain {
   fundingVetoLongZ?: number;
   /** Close any position older than this many minutes. */
   timeStopMinutes?: (ctx: BeeContext) => number;
+  /** Code-side exits beyond the stop (e.g. take half at a target, close when funding flips). null = none now. */
+  forcedExit?(ctx: BeeContext): ForcedExit | null;
   /** Code-side sizing: an add that brings an undersized position back to target (fires when Jev holds). */
   rebalance?: (ctx: BeeContext) => Extract<Intent, { kind: "add" }> | null;
   /** This bee waits for its setup instead of being forced in when flat (drama rule 2 does not apply). */

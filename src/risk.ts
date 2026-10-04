@@ -173,6 +173,8 @@ export function applyRisk(input: RiskInput): RiskResult {
     if (ts !== undefined && minutesSince(p.openedAt, now) >= ts) {
       return out({ kind: "close", reason: "time_stop" }, { forcedBy: "time_stop", vetoedBy: proposal ? "time_stop" : null, status: `time stop on ${p.coin}` });
     }
+    const fx = brain.forcedExit?.(ctx);
+    if (fx) return out(toAction(fx.intent), { forcedBy: fx.reason, vetoedBy: proposal ? fx.reason : null, status: fx.status });
   }
 
   // 3. Jev fail-closed: hold whatever we have, open nothing.
