@@ -24,7 +24,7 @@ cannot add shorts to Momentum, remove its 24h lock, or change stops. So this nee
 | Funding flip (exit) | **Sign flip.** A long exits when funding turns > 0; a short exits when it turns < 0. |
 | Entry vs funding | Enter only where funding clearly favours the side: long needs funding ≤ −0.002 %/8h, short needs ≥ +0.002 %/8h. (Follows from the exit rule; the dead band avoids churn on coins sitting at ~0.) Consequence: mostly short, since most coins carry positive funding. |
 | Stop | 6–8 %, 7 % at a typical swing: `stopPct = clamp(4 + 2 × atr1hPct, 6, 8)`, 7 % when ATR is unknown. Fixed at entry. |
-| Take profit | When the best price since entry is ≥ +6 % from average entry, close half (once). |
+| Take profit | When the mark is ≥ +6 % from average entry (checked every tick), close half (once). |
 | Trail the rest | After the half is taken: stop ≥ break-even (average entry), and trails 3 × ATR(1h) behind the mark. Ratchet only (engine rule). No trailing before the half. |
 | Size | 1 × equity (0.5 of max notional, ≈ $323 on $333). No adds. |
 | Rotation | No holding period: close or switch to any eligible coin on any tick. Brakes: 6 trades/day, $3 fee budget/day, 5 min cooldown after an order. |
@@ -65,14 +65,14 @@ Conviction labels: `["meh", "keen", "eager", "all-in"]` (display only; size is f
 step 2, right after the code stop and time stop, so it fires whatever Jev says, when Jev is down, and while benched.
 Wanna's implementation, in order:
 1. Funding sign flipped against the position → close, reason `funding_flip`.
-2. `!halfTaken` and best price ≥ +6 % from average entry → trim 0.5, reason `take_half`.
+2. `!halfTaken` and mark ≥ +6 % from average entry → trim 0.5, reason `take_half`.
 
 Brains without the hook are unaffected (existing behaviour byte-for-byte).
 
 ### 3. Engine and position state
 
 - `Position.halfTaken?: boolean`. The engine sets it after a successful trim (any brain; only Wanna reads it), and
-  `peakPx` is tracked for Wanna as it is for profit-lock brains.
+  also when a trim rounds to zero contracts, so a forced trim is never retried every tick.
 - No other engine change. Forced trims count against the fee budget like any order; trade cap counts opens only (as today).
 
 ### 4. Style registry and config
