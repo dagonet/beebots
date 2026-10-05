@@ -162,6 +162,7 @@ export class Engine {
     try {
       await this.d.feed.refresh(this.now());
       this.rankBoozyHourly();
+      for (const id of BEES) this.brain(id).afterRefresh?.(this.ctx(id, this.now()));
       if (this.d.exec.kind === "okx") await this.pollFunding();
     } catch (err) {
       log.warn("market refresh failed", { err: safeError(err) });

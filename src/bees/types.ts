@@ -24,6 +24,8 @@ export interface Position {
   entryScore?: number;
   /** wanna: half the position has been taken off (set by the engine after any trim). */
   halfTaken?: boolean;
+  /** wanna: market refreshes in a row on which the held coin failed the entry filters. */
+  offStreak?: number;
 }
 
 export type CapReason = "trade_cap" | "fee_budget" | "loss_stop" | "retired";
@@ -131,6 +133,8 @@ export interface BeeBrain {
   timeStopMinutes?: (ctx: BeeContext) => number;
   /** Code-side exits beyond the stop (e.g. take half at a target, close when funding flips). null = none now. */
   forcedExit?(ctx: BeeContext): ForcedExit | null;
+  /** Called once after every full market refresh (not every tick), e.g. to count refreshes on the bee's position. */
+  afterRefresh?(ctx: BeeContext): void;
   /** Code-side sizing: an add that brings an undersized position back to target (fires when Jev holds). */
   rebalance?: (ctx: BeeContext) => Extract<Intent, { kind: "add" }> | null;
   /** This bee waits for its setup instead of being forced in when flat (drama rule 2 does not apply). */

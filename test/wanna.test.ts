@@ -64,15 +64,24 @@ describe("wanna: menu", () => {
     expect(wanna.menu(c(bee("wanna"), market({ VVV: { volZ: 0 }, WWW: { volZ: 0 }, XXX: { volZ: 0 }, YYY: { volZ: 0 }, ZZZ: { volZ: 0 }, AAA: { volZ: 0 }, BBB: { volZ: 0 }, CCC: { volZ: 0 }, DDD: { volZ: 0 }, EEE: { volZ: 0 } })))).toEqual({});
   });
 
-  it("holding a coin that still qualifies: HOLD and a switch to every other eligible coin, no CLOSE (code owns the exits)", () => {
+  it("holding a coin that still qualifies: HOLD and a switch only to a clearly stronger coin, no CLOSE (code owns the exits)", () => {
+    // Strength = momentum score for a long, minus it for a short. DDD ~0.66; AAA/ZZZ ~1.66, BBB/YYY ~1.33, CCC/XXX ~1.0, WWW ~0.66.
     const v = market();
-    const aaa = v.stats.get("AAA-USD_UM_XPERP-310404")!;
-    const m = wanna.menu(c(bee("wanna", { position: position(aaa), flatSince: null }), v));
+    const ddd = v.stats.get("DDD-USD_UM_XPERP-310404")!;
+    const m = wanna.menu(c(bee("wanna", { position: position(ddd), flatSince: null }), v));
     expect(m.HOLD!.intent).toEqual({ kind: "hold" });
     expect(m.CLOSE).toBeUndefined();
-    expect(m.LONG_AAA).toBeUndefined();
-    expect(m.LONG_BBB!.intent).toMatchObject({ kind: "switch", side: "long" });
+    expect(m.LONG_DDD).toBeUndefined();
+    expect(labels(m)).toEqual(["HOLD", "LONG_AAA", "LONG_BBB", "SHORT_YYY", "SHORT_ZZZ"]);
+    expect(m.LONG_AAA!.intent).toMatchObject({ kind: "switch", side: "long" });
     expect(m.SHORT_ZZZ!.intent).toMatchObject({ kind: "switch", side: "short" });
+  });
+
+  it("no ping-pong between near-equal coins (5 Oct: ZEC <-> TAO every 5 min)", () => {
+    const v = market({ YYY: { ret7dPct: -49, ret24hPct: -12.25 } }); // YYY now within a hair of ZZZ
+    const zzz = v.stats.get("ZZZ-USD_UM_XPERP-310404")!;
+    const m = wanna.menu(c(bee("wanna", { position: position(zzz, { side: "short" }), flatSince: null }), v));
+    expect(labels(m)).toEqual(["HOLD"]);
   });
 
   it("holding the only qualifying coin: HOLD alone, so the rules hold without asking Jev", () => {
@@ -81,20 +90,53 @@ describe("wanna: menu", () => {
     expect(labels(wanna.menu(c(bee("wanna", { position: position(zec, { side: "short" }), flatSince: null }), only)))).toEqual(["HOLD"]);
   });
 
-  it("holding a coin that no longer qualifies (volume faded): CLOSE is offered", () => {
+  it("CLOSE only once the coin has failed the filters on 3 market refreshes in a row (4 Oct: ENA flickered)", () => {
     const v = market({ AAA: { volZ: -0.5 } });
     const aaa = v.stats.get("AAA-USD_UM_XPERP-310404")!;
-    const m = wanna.menu(c(bee("wanna", { position: position(aaa), flatSince: null }), v));
-    expect(m.CLOSE!.intent).toMatchObject({ kind: "close" });
-    expect(m.HOLD).toBeDefined();
+    const menuAt = (offStreak: number) => wanna.menu(c(bee("wanna", { position: position(aaa, { offStreak }), flatSince: null }), v));
+    expect(menuAt(2).CLOSE).toBeUndefined();
+    expect(menuAt(3).CLOSE!.intent).toMatchObject({ kind: "close" });
+    expect(menuAt(3).HOLD).toBeDefined();
   });
 
-  it("holding a coin missing from the market data: HOLD and CLOSE are still offered", () => {
-    const gone = coin("GONE", {});
-    const m = wanna.menu(c(bee("wanna", { position: position(gone), flatSince: null })));
-    expect(m.HOLD).toBeDefined();
-    expect(m.CLOSE).toBeDefined();
+  it("once the coin no longer qualifies, any eligible coin may be switched to", () => {
+    const v = market({ AAA: { volZ: -0.5 } });
+    const aaa = v.stats.get("AAA-USD_UM_XPERP-310404")!;
+    const m = wanna.menu(c(bee("wanna", { position: position(aaa, { offStreak: 3 }), flatSince: null }), v));
+    expect(m.SHORT_WWW).toBeDefined();
   });
+
+  it("holding a coin missing from the market data: HOLD always, CLOSE after 3 refreshes", () => {
+    const gone = coin("GONE", {});
+    const at = (offStreak: number) => wanna.menu(c(bee("wanna", { position: position(gone, { offStreak }), flatSince: null })));
+    expect(at(0).HOLD).toBeDefined();
+    expect(at(0).CLOSE).toBeUndefined();
+    expect(at(3).CLOSE).toBeDefined();
+  });
+});
+
+describe("wanna: afterRefresh counts refreshes the held coin fails the filters", () => {
+  const run = (v: ReturnType<typeof market>, pos: ReturnType<typeof position> | null) => {
+    const b = bee("wanna", { position: pos, flatSince: pos ? null : 0 });
+    wanna.afterRefresh!(c(b, v));
+    return b.position;
+  };
+
+  it("counts up while the coin does not qualify, and resets once it does", () => {
+    const off = market({ AAA: { volZ: -0.5 } });
+    const aaa = off.stats.get("AAA-USD_UM_XPERP-310404")!;
+    expect(run(off, position(aaa))?.offStreak).toBe(1);
+    expect(run(off, position(aaa, { offStreak: 2 }))?.offStreak).toBe(3);
+    const on = market();
+    expect(run(on, position(on.stats.get("AAA-USD_UM_XPERP-310404")!, { offStreak: 2 }))?.offStreak).toBe(0);
+  });
+
+  it("does nothing while flat", () => {
+    expect(run(market(), null)).toBeNull();
+  });
+});
+
+describe("wanna: menu (continued)", () => {
 
   it("is never forced in while flat", () => {
     expect(wanna.neverForce).toBe(true);

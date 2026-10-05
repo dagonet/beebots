@@ -10,8 +10,8 @@ no loyalty to a coin.
     LONG_<coin>    x up to 4: top-20% 7-day leaders, volume z > 0, funding <= -0.002%/8h (shorts pay)
     SHORT_<coin>   x up to 4: bottom-20% 7-day laggards, volume z > 0, funding >= +0.002%/8h (longs pay)
     WAIT           while flat and something is on offer (Jev may decline every entry)
-    HOLD           while holding; every other menu coin becomes a switch
-    CLOSE          only once the held coin no longer qualifies (the exits are code's)
+    HOLD           while holding; a menu coin becomes a switch only if clearly stronger (momentum z +0.5)
+    CLOSE          only once the held coin failed the filters on 3 market refreshes in a row (the exits are code's)
     conviction: score ["meh","keen","eager","all-in"] (display only)
 
 ## Risk and forcing (code)
@@ -27,6 +27,13 @@ no loyalty to a coin.
 The first menu had no WAIT and a plain CLOSE on every tick. With ZEC the only candidate, Jev was handed a lone
 SHORT_ZEC (a forced pick), then flipped a ~50/50 HOLD/CLOSE coin every 10 s: six round trips in 30 minutes, $1.91 in
 fees, trade cap gone by 10:28 UTC. WAIT now lets Jev decline, and CLOSE waits for the coin to stop qualifying.
+
+## 5 Oct 2026 fix
+
+Still 23 orders in a day: ENA's volume sat at the line, so "no longer qualifies" flickered and CLOSE was taken five
+times in 20 minutes; then ZEC and TAO ranked almost equal and it switched between them every 5 minutes (the
+cooldown). CLOSE now needs 3 failed refreshes in a row (about 3 minutes) and a switch needs a clearly stronger coin.
+No holding period.
 
 ## Honest expectation
 

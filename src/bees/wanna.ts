@@ -18,6 +18,10 @@ const BUCKET_MIN = 5;
 const PER_SIDE = 4;
 /** After the half: trail 3 x ATR(1h) behind the mark, never below break-even. */
 const TRAIL_ATR1H = 3;
+/** CLOSE needs the held coin to fail the filters on this many market refreshes in a row (one blip is not a reason). */
+export const WANNA_OFF_REFRESHES = 3;
+/** A switch needs the new coin this much stronger (momentum z-score) than the held one: no ping-pong on near-ties. */
+export const WANNA_SWITCH_GAP = 0.5;
 
 /** 1h ATR in % of price, approximated as 2 x the 15m ATR (as Momentum does). */
 const atr1hPct = (s: CoinStats | undefined) => (s && s.atr14Pct !== null ? s.atr14Pct * 2 : null);
@@ -35,12 +39,12 @@ export interface WannaEntry {
   score: number;
 }
 
-/** Eligible longs (best first) and shorts (weakest first): rising volume, funding on the bee's side. */
-export function wannaEntries(view: MarketView, spreadGateBps: number): { longs: WannaEntry[]; shorts: WannaEntry[] } {
+/** Every coin that passes the filters (uncapped), plus each pool coin's momentum score. */
+function eligible(view: MarketView, spreadGateBps: number): { longs: WannaEntry[]; shorts: WannaEntry[]; score: Map<string, number> } {
   const pool = view.gated
     .map((id) => view.stats.get(id))
     .filter((s): s is CoinStats => !!s && s.ret7dPct !== null && s.ret24hPct !== null && s.spreadBp <= spreadGateBps);
-  if (!pool.length) return { longs: [], shorts: [] };
+  if (!pool.length) return { longs: [], shorts: [], score: new Map() };
   const z7 = zs(pool.map((s) => s.ret7dPct!));
   const z24 = zs(pool.map((s) => s.ret24hPct!));
   const ranked = pool.map((s) => ({ s, score: z7(s.ret7dPct!) + 0.1 * z24(s.ret24hPct!) })).sort((a, b) => b.score - a.score);
@@ -49,20 +53,35 @@ export function wannaEntries(view: MarketView, spreadGateBps: number): { longs: 
   const longs = ranked
     .slice(0, n)
     .filter((c) => rising(c.s) && c.s.fundingPct !== null && c.s.fundingPct <= -WANNA_FUNDING_EDGE_PCT)
-    .slice(0, PER_SIDE)
     .map((c) => ({ ...c, side: "long" as const }));
   const shorts = ranked
     .slice(-n)
     .reverse()
     .filter((c) => rising(c.s) && c.s.fundingPct !== null && c.s.fundingPct >= WANNA_FUNDING_EDGE_PCT)
-    .slice(0, PER_SIDE)
     .map((c) => ({ ...c, side: "short" as const }));
-  return { longs, shorts };
+  return { longs, shorts, score: new Map(ranked.map((c) => [c.s.instId, c.score])) };
+}
+
+/** Eligible longs (best first) and shorts (weakest first): rising volume, funding on the bee's side. */
+export function wannaEntries(view: MarketView, spreadGateBps: number): { longs: WannaEntry[]; shorts: WannaEntry[] } {
+  const e = eligible(view, spreadGateBps);
+  return { longs: e.longs.slice(0, PER_SIDE), shorts: e.shorts.slice(0, PER_SIDE) };
 }
 
 const entries = (ctx: BeeContext) => {
   const { longs, shorts } = wannaEntries(ctx.view, ctx.knobs.spreadGateBps);
   return [...longs, ...shorts];
+};
+
+/** Strength on the bee's side: the momentum score for a long, minus it for a short. */
+const strength = (side: Side, score: number) => (side === "long" ? score : -score);
+
+/** The held coin still passes the filters on its side (anywhere in its bucket, not only the top 4 on the menu). */
+function stillQualifies(ctx: BeeContext): boolean {
+  const p = ctx.bee.position;
+  if (!p) return false;
+  const e = eligible(ctx.view, ctx.knobs.spreadGateBps);
+  return (p.side === "long" ? e.longs : e.shorts).some((x) => x.s.instId === p.instId);
 };
 
 export const wanna: BeeBrain = {
@@ -100,15 +119,19 @@ export const wanna: BeeBrain = {
     const p = ctx.bee.position;
     const all = entries(ctx);
     const m: Menu = {};
+    // The exits are code's (stop, half at +6%, trail, funding flip). A plain CLOSE every tick was a coin toss (4 Oct:
+    // six ZEC shorts closed within 20 s), and a CLOSE on the first failed check flickered with the data (4 Oct: ENA
+    // closed five times in 20 min), so it needs the coin off the filters for WANNA_OFF_REFRESHES refreshes in a row.
+    const off = !!p && (p.offStreak ?? 0) >= WANNA_OFF_REFRESHES;
+    // While the held coin still counts, only a clearly stronger coin is worth a switch (5 Oct: ZEC <-> TAO ping-pong).
+    const heldScore = p ? eligible(ctx.view, ctx.knobs.spreadGateBps).score.get(p.instId) : undefined;
+    const worthSwitching = (e: WannaEntry) => off || (!!p && heldScore !== undefined && strength(e.side, e.score) >= strength(p.side, heldScore) + WANNA_SWITCH_GAP);
     if (p) {
       m.HOLD = { desc: "keep position", intent: { kind: "hold" } };
-      // The exits are code's (stop, half at +6%, trail, funding flip). A plain CLOSE every tick was a coin toss that
-      // churned fees (4 Oct: six ZEC shorts closed within 20 s), so it is offered only once the coin no longer qualifies.
-      const stillQualifies = all.some((e) => e.s.instId === p.instId && e.side === p.side);
-      if (!stillQualifies) m.CLOSE = { desc: `${p.coin} no longer qualifies, close`, intent: { kind: "close", reason: "no_longer_qualifies" } };
+      if (off) m.CLOSE = { desc: `${p.coin} no longer qualifies, close`, intent: { kind: "close", reason: "no_longer_qualifies" } };
     }
     for (const e of all) {
-      if (p && e.s.instId === p.instId) continue;
+      if (p && (e.s.instId === p.instId || !worthSwitching(e))) continue;
       const label = `${e.side.toUpperCase()}_${e.s.coin}`;
       m[label] = p
         ? { desc: `close ${p.coin}, ${e.side} ${e.s.coin}`, intent: { kind: "switch", instId: e.s.instId, side: e.side, sizeFrac: ENTRY_FRAC, setup: "strict" } }
@@ -117,6 +140,12 @@ export const wanna: BeeBrain = {
     // Flat with something on offer: Jev may decline (a lone entry used to be a forced pick).
     if (!p && all.length) m.WAIT = { desc: "no setup convinces, keep waiting", intent: { kind: "hold" } };
     return m;
+  },
+
+  afterRefresh(ctx) {
+    const p = ctx.bee.position;
+    if (!p) return;
+    p.offStreak = stillQualifies(ctx) ? 0 : (p.offStreak ?? 0) + 1;
   },
 
   forcedEntry() {

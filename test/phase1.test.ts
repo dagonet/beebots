@@ -196,6 +196,14 @@ describe("engine: a trim marks the half as taken", () => {
     expect(engine.bees.bee3.position).toBeNull();
   });
 
+  it("after each market refresh the engine calls every bee's afterRefresh with that bee's own context", async () => {
+    const engine = await harness();
+    const seen: string[] = [];
+    (engine as unknown as { brains: Record<string, unknown> }).brains.bee3 = { ...boozy, afterRefresh: (ctx: { bee: { id: string } }) => void seen.push(ctx.bee.id) };
+    await engine.refreshMarket();
+    expect(seen).toEqual(["bee3"]);
+  });
+
   it("a forced exit closes while Jev is down", async () => {
     const down: SystemOne = {
       async systemOne() {
