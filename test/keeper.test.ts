@@ -450,8 +450,8 @@ describe("beekeeper: the scorecard", () => {
     // the owner's own quote marks cannot break the fence
     expect(card.scorecard).toMatch(/bee3 "Zip" \(Momentum style\): .* Current rules: "Chase the 'loudest' coin\." Coins: any its style allows/);
     expect(card).toMatchObject({ open_bees: "bee1,bee2,bee3", universe: "BTC,ETH,SOL,LINK", start_equity_usd: 333, total_pnl_usd: -129.7, bee1_pnl_pct: -9, bee2_pnl_pct: 2.6, bee3_pnl_pct: -32, top_bee_name: "ScrumBee", top_bee_rules: "Trade only BTC, ETH and LINK.", top_bee_coins: "BTC,ETH,LINK" });
-    // the playbook: the three styles by label, then who trades what, and the ids to answer with
-    expect(card.playbook.split("\n").map((l) => l.slice(0, 12))).toEqual(["- Breakout: ", "- Trend: nev", "- Momentum: ", "- About itse", "- The bees: "]);
+    // the playbook: every style by label, then who trades what, and the ids to answer with
+    expect(card.playbook.split("\n").map((l) => l.slice(0, 12))).toEqual(["- Breakout: ", "- Trend: nev", "- Momentum: ", "- Contrarian", "- About itse", "- The bees: "]);
     expect(card.playbook).toContain('bee1 "Rex" trades the Breakout style; bee2 "Granny" trades the Trend style, and its owner limits it to BTC; bee3 "Zip" trades the Momentum style. Every answer must name a bee by its id: bee1, bee2 or bee3.');
 
     // after a rewrite the bee is locked and its line shows the Beekeeper's rules

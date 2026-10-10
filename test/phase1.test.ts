@@ -142,3 +142,78 @@ describe("rules-only hold: Jev is not asked", () => {
     expect(row?.required).toBeUndefined();
   });
 });
+
+describe("engine: a trim marks the half as taken", () => {
+  const ena = coin("ENA", { fundingPct: -0.01 });
+  const market = () => view([ena]);
+
+  const notOnMenu: SystemOne = {
+    async systemOne() {
+      return { model: "fake", usage: { input_tokens: 100, output_tokens: 0 }, answers: { action: { type: "choice", choice: "NOT_ON_MENU", confidence: 1, probabilities: {} }, conviction: { type: "score", score: 1, confidence: 1, legend: {}, probabilities: {} } } } as never;
+    },
+  };
+
+  async function harness(client: SystemOne = notOnMenu) {
+    const cfg = testConfig({ DRY_RUN: "true" });
+    const v = market();
+    const feed = { view: () => v, refresh: async () => {}, refreshTickers: async () => {}, lastRefreshAt: NOW } as unknown as MarketFeed;
+    const db = new Db(":memory:");
+    const engine = new Engine({ cfg, db, feed, jev: new Jev({ ...cfg.jev, client, now: () => NOW }), exec: new SimExecutor(() => v, cfg.risk.takerFeeRate), bus: new EventBus(db), alerts: new Alerts(undefined), now: () => NOW });
+    await engine.start();
+    engine.stop();
+    return engine;
+  }
+  const hold = (contracts: number) => ({ instId: ena.instId, coin: "ENA", side: "long" as const, contracts, entryPx: 93, openedAt: NOW - 60 * 60_000, stopPx: 87, riskUsd: 10, initialStopPx: 87 });
+  // A brain whose only rule is "take half now" isolates the engine's trim handling from the wanna brain.
+  const halfBrain = { ...boozy, forcedExit: () => ({ intent: { kind: "trim" as const, fraction: 0.5 }, reason: "take_half", status: "took half" }) };
+
+  it("after a filled trim, halfTaken is set and half the contracts are gone", async () => {
+    const engine = await harness();
+    (engine as unknown as { brains: Record<string, unknown> }).brains.bee3 = halfBrain;
+    engine.bees.bee3.position = hold(20);
+    engine.bees.bee3.flatSince = null;
+    await engine.tick();
+    expect(engine.bees.bee3.position).toMatchObject({ contracts: 10, halfTaken: true });
+  });
+
+  it("a trim that rounds to zero contracts still marks the half, so it is not retried every tick", async () => {
+    const engine = await harness();
+    (engine as unknown as { brains: Record<string, unknown> }).brains.bee3 = halfBrain;
+    engine.bees.bee3.position = hold(1);
+    engine.bees.bee3.flatSince = null;
+    await engine.tick();
+    expect(engine.bees.bee3.position).toMatchObject({ contracts: 1, halfTaken: true });
+  });
+
+  // A brain whose only rule is "close now", to drive a forced exit through the real engine paths.
+  const closeBrain = { ...boozy, forcedExit: () => ({ intent: { kind: "close" as const, reason: "funding_flip" }, reason: "funding_flip", status: "funding flipped" }) };
+
+  it("a forced exit closes while the bee is benched (trade cap used up)", async () => {
+    const engine = await harness();
+    (engine as unknown as { brains: Record<string, unknown> }).brains.bee3 = closeBrain;
+    Object.assign(engine.bees.bee3, { position: hold(20), flatSince: null, tradesToday: 3, cap: "trade_cap" });
+    await engine.tick();
+    expect(engine.bees.bee3.position).toBeNull();
+  });
+
+  it("after each market refresh the engine calls every bee's afterRefresh with that bee's own context", async () => {
+    const engine = await harness();
+    const seen: string[] = [];
+    (engine as unknown as { brains: Record<string, unknown> }).brains.bee3 = { ...boozy, afterRefresh: (ctx: { bee: { id: string } }) => void seen.push(ctx.bee.id) };
+    await engine.refreshMarket();
+    expect(seen).toEqual(["bee3"]);
+  });
+
+  it("a forced exit closes while Jev is down", async () => {
+    const down: SystemOne = {
+      async systemOne() {
+        throw new Error("ECONNREFUSED");
+      },
+    };
+    const engine = await harness(down);
+    (engine as unknown as { brains: Record<string, unknown> }).brains.bee3 = closeBrain;
+    Object.assign(engine.bees.bee3, { position: hold(20), flatSince: null });
+    await engine.tick();
+    expect(engine.bees.bee3.position).toBeNull();
+  });
+});

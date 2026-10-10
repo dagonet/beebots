@@ -325,3 +325,42 @@ describe("stale data", () => {
     expect(run(ctx("boozy", b, V), boozy, prop({ kind: "close", reason: "bail" }), "ok", stale).action.kind).toBe("close");
   });
 });
+
+describe("forcedExit hook", () => {
+  const exitBrain = (fx: ReturnType<NonNullable<BeeBrain["forcedExit"]>>): BeeBrain => ({ ...boozy, forcedExit: () => fx });
+  const flip = { intent: { kind: "close" as const, reason: "funding_flip" }, reason: "funding_flip", status: "funding flipped" };
+  const held = () => bee("boozy", { position: position(SOL), flatSince: null });
+
+  it("fires over Jev's choice", () => {
+    const r = run(ctx("boozy", held(), V), exitBrain(flip), prop({ kind: "hold" }));
+    expect(r.action).toEqual({ kind: "close", reason: "funding_flip" });
+    expect(r.forcedBy).toBe("funding_flip");
+    expect(r.vetoedBy).toBe("funding_flip");
+    expect(r.status).toBe("funding flipped");
+  });
+
+  it("fires when Jev is unreachable or over its daily cap", () => {
+    expect(run(ctx("boozy", held(), V), exitBrain(flip), null, "unreachable").action.kind).toBe("close");
+    expect(run(ctx("boozy", held(), V), exitBrain(flip), null, "daily_cap").action.kind).toBe("close");
+  });
+
+  it("fires while benched (trade cap)", () => {
+    const b = bee("boozy", { position: position(SOL), flatSince: null, tradesToday: 3, cap: "trade_cap" });
+    expect(run(ctx("boozy", b, V), exitBrain(flip), null, "no_options").action).toEqual({ kind: "close", reason: "funding_flip" });
+  });
+
+  it("a trim exit becomes a trim action", () => {
+    const half = { intent: { kind: "trim" as const, fraction: 0.5 }, reason: "take_half", status: "took half" };
+    expect(run(ctx("boozy", held(), V), exitBrain(half), prop({ kind: "hold" })).action).toEqual({ kind: "trim", fraction: 0.5 });
+  });
+
+  it("a code stop still wins over a forced exit", () => {
+    const b = bee("boozy", { position: position(SOL, { stopPx: 101 }), flatSince: null });
+    expect(run(ctx("boozy", b, V), exitBrain(flip), prop({ kind: "hold" })).forcedBy).toBe("stop");
+  });
+
+  it("null means no forced exit, and brains without the hook are unchanged", () => {
+    expect(run(ctx("boozy", held(), V), exitBrain(null), prop({ kind: "hold" })).action).toEqual({ kind: "none" });
+    expect(run(ctx("boozy", held(), V), boozy, prop({ kind: "hold" })).action).toEqual({ kind: "none" });
+  });
+});

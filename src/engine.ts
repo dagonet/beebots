@@ -162,6 +162,7 @@ export class Engine {
     try {
       await this.d.feed.refresh(this.now());
       this.rankBoozyHourly();
+      for (const id of BEES) this.brain(id).afterRefresh?.(this.ctx(id, this.now()));
       if (this.d.exec.kind === "okx") await this.pollFunding();
     } catch (err) {
       log.warn("market refresh failed", { err: safeError(err) });
@@ -511,8 +512,15 @@ export class Engine {
         if (!p) return;
         const inst = ctx.view.instruments.get(p.instId);
         const n = inst ? roundToLot(p.contracts * action.fraction, inst) : 0;
-        if (n > 0 && inst && n >= inst.minSz) await this.order(id, decisionId, p.instId, p.side === "long" ? "sell" : "buy", n, true, "trim");
-        else log.info("trim rounds to zero, skipped", { bee: id });
+        if (n > 0 && inst && n >= inst.minSz) {
+          const ok = await this.order(id, decisionId, p.instId, p.side === "long" ? "sell" : "buy", n, true, "trim");
+          const q = this.bees[id].position;
+          if (ok && q) q.halfTaken = true;
+        } else {
+          log.info("trim rounds to zero, skipped", { bee: id });
+          // Too small to split: count the half as taken, or a forced trim would retry on every tick.
+          p.halfTaken = true;
+        }
         return;
       }
       case "add": {

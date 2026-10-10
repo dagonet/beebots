@@ -41,7 +41,7 @@ const opt = z
   .optional()
   .transform((v) => (v === undefined || v.trim() === "" ? undefined : v.trim()));
 
-// Per-style knobs: BIZZY_* = Breakout, BREEZY_* = Trend, BOOZY_* = Momentum. Every bee on that style uses them.
+// Per-style knobs: BIZZY_* = Breakout, BREEZY_* = Trend, BOOZY_* = Momentum, WANNA_* = Contrarian Momentum. Every bee on that style uses them.
 const perStyle = (prefix: string, d: { trades: number; fee: number; spread: number; cooldown: number; stopAtr: number; maxFlat: number }) => ({
   [`${prefix}_MAX_TRADES_PER_DAY`]: num(d.trades),
   [`${prefix}_FEE_BUDGET_USD_DAY`]: num(d.fee),
@@ -100,6 +100,7 @@ const EnvSchema = z.object({
   ...perStyle("BREEZY", { trades: 3, fee: 1.0, spread: 5, cooldown: 240, stopAtr: 2, maxFlat: 0 }),
   ...perStyle("BIZZY", { trades: 1, fee: 1.0, spread: 5, cooldown: 5, stopAtr: 1.5, maxFlat: 20 }),
   ...perStyle("BOOZY", { trades: 3, fee: 3.0, spread: 15, cooldown: 2, stopAtr: 2, maxFlat: 0 }),
+  ...perStyle("WANNA", { trades: 6, fee: 3.0, spread: 15, cooldown: 5, stopAtr: 2, maxFlat: 0 }),
   ...perSlot("BEE1"),
   ...perSlot("BEE2"),
   ...perSlot("BEE3"),
@@ -320,7 +321,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env, settings: Setti
       takerFeeRate: e.TAKER_FEE_RATE,
     },
     universe: { min24hVolUsd: e.MIN_24H_VOL_USD, allowNonCrypto: e.ALLOW_NON_CRYPTO },
-    bees: { bizzy: knobs("bizzy"), breezy: knobs("breezy"), boozy: knobs("boozy") },
+    bees: { bizzy: knobs("bizzy"), breezy: knobs("breezy"), boozy: knobs("boozy"), wanna: knobs("wanna") },
     breezy: { minOpenProb: e.BREEZY_MIN_OPEN_PROB, minSizeUsd: e.BREEZY_MIN_SIZE_USD },
     bizzy: { sizeFraction: e.BIZZY_SIZE_FRACTION, universeSize: e.BIZZY_UNIVERSE_SIZE, timeStopMinutes: e.BIZZY_TIME_STOP_MINUTES },
     boozy: { candidates: e.BOOZY_CANDIDATES },

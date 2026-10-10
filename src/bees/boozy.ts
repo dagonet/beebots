@@ -9,7 +9,7 @@ export interface Candidate {
   attention: number | null;
 }
 
-function zs(xs: number[]): (x: number) => number {
+export function zs(xs: number[]): (x: number) => number {
   const m = xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
   const sd = Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / (xs.length || 1)) || 1;
   return (x) => (x - m) / sd;

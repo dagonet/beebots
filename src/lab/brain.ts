@@ -6,11 +6,12 @@ import { BIZZY_BREAKOUT_COINS } from "../bees/bizzy.js";
 import { BREEZY_COINS } from "../bees/breezy.js";
 import type { StyleId } from "../settings.js";
 
-/** What each style may trade at all. null = any crypto X-Perp that passes the gates (Momentum). */
+/** What each style may trade at all. null = any crypto X-Perp that passes the gates (Momentum, Contrarian Momentum). */
 export const STYLE_COINS: Record<StyleId, readonly string[] | null> = {
   bizzy: BIZZY_BREAKOUT_COINS,
   breezy: BREEZY_COINS,
   boozy: null,
+  wanna: null,
 };
 
 /** The part of a bee the Beekeeper works with: its style and what the owner gave it on Setup. */
